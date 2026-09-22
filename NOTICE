@@ -1,0 +1,13 @@
+MetaLens Tracker
+
+src/parser.ts is adapted from CoinPokerTracker by mleclerc182
+(https://github.com/mleclerc182/CoinPokerTracker, commit 6282c23),
+licensed under Apache License 2.0 with the Commons Clause License Condition v1.0.
+Full license: third_party/CoinPokerTracker-LICENSE.md
+
+Commons Clause: the license does not grant the right to Sell the Software, i.e. to
+provide it to third parties for a fee or other consideration (including hosting or
+support fees) when the product's value derives substantially from its functionality.
+
+Modifications: rewritten in TypeScript for PokerKing / PokerStars-syntax hand
+histories; per-player stats for every seat; walk flag; equity/all-in EV removed.

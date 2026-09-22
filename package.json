@@ -1,0 +1,14 @@
+{
+  "name": "metalens-tracker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "npm run build:ui && node --test src/*.test.ts worker.test.ts",
+    "build:ui": "node -e \"require('esbuild').build({entryPoints:['src/ui.ts'],bundle:true,format:'esm',minify:true,outfile:'public/app.js'}).catch(()=>process.exit(1))\"",
+    "fixture": "node scripts/make-fixture.mjs"
+  },
+  "devDependencies": {
+    "miniflare": "^4.20260730.0",
+    "wrangler": "^4.136.2"
+  }
+}
