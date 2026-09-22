@@ -4,7 +4,7 @@
   "compatibility_date": "2026-09-01",
   // public/ is served as static assets; /api/* goes to the Worker
   "assets": { "directory": "public", "run_worker_first": ["/api/*"] },
-  "d1_databases": [{ "binding": "DB", "database_name": "metalens", "database_id": "REPLACE_AFTER_wrangler_d1_create" }],
+  "d1_databases": [{ "binding": "DB", "database_name": "metalens", "database_id": "local-only-placeholder" }],
   "r2_buckets": [{ "binding": "RAW", "bucket_name": "metalens-raw" }],
   "limits": { "cpu_ms": 60000 },
   "vars": {

@@ -28,6 +28,9 @@ export interface Env {
   ACCESS_TEAM?: string;    // <team>.cloudflareaccess.com (certs are fetched from there)
   ACCESS_JWKS?: string;    // tests: JWKS JSON instead of fetching
   ADMINS?: string;         // comma-separated emails allowed to rebuild
+  DEV_USER?: string;       // local only: skips Access and acts as this user.
+                           // Passed on the command line (npm run dev), never in wrangler.jsonc,
+                           // so a deployed Worker always requires a real Access token.
 }
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -36,6 +39,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 let jwks: { keys: (JsonWebKey & { kid: string })[] } | null = null;
 const b64 = (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), ch => ch.charCodeAt(0));
 async function accessUser(req: Request, env: Env): Promise<string | null> {
+  if (env.DEV_USER) return env.DEV_USER;
   const token = req.headers.get('cf-access-jwt-assertion');
   const [h, p, sig] = token?.split('.') ?? [];
   if (!sig) return null;

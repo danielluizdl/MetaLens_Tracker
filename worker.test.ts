@@ -51,6 +51,19 @@ before(async () => {
 });
 after(() => mf?.dispose());
 
+test('DEV_USER (local mode) skips Access, and only when it is set', { skip }, async () => {
+  const local = new Miniflare({
+    modules: true, script: (await build({ entryPoints: ['worker.ts'], bundle: true, format: 'esm', write: false, platform: 'neutral' })).outputFiles[0].text,
+    compatibilityDate: '2025-09-01', d1Databases: ['DB'], r2Buckets: ['RAW'],
+    bindings: { ACCESS_AUD: AUD, DEV_USER: 'eu@local' },
+  });
+  const db = await local.getD1Database('DB');
+  for (const stmt of readFileSync('schema.sql', 'utf8').replace(/--.*$/gm, '').split(';').map(s => s.trim()).filter(Boolean)) await db.prepare(stmt).run();
+  const res = await local.dispatchFetch('http://localhost/api/regs'); // no token at all
+  assert.equal(res.status, 200);
+  await local.dispose();
+});
+
 test('requests without a valid Access token are rejected', { skip }, async () => {
   assert.equal((await api('/api/regs', { user: null })).status, 401);
   const res = await mf.dispatchFetch('http://localhost/api/regs', { headers: { 'cf-access-jwt-assertion': await jwt('a@team.com', { aud: 'other' }) } });

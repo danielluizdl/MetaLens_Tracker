@@ -4,7 +4,7 @@ Tracker de poker no estilo do Hand2Note para um time de cash game. Recebe histó
 minerados, calcula as stats com as **mesmas definições do H2N** e mostra tudo num HUD web que o
 time acessa com login.
 
-Estado hoje: parser, stats e API prontos e testados; a tela funciona; falta publicar.
+Estado hoje: roda inteiro no seu PC (parser, stats, API, banco e tela). Publicar na Cloudflare é opcional e fica para quando o time decidir.
 
 ## Por que existe
 
@@ -46,6 +46,42 @@ node scripts/preview.mjs # abre a tela em http://localhost:8790 com dados do rec
 **As mãos nunca entram no repositório.** `hands_*.txt` e `test/fixtures/sample.txt` estão no
 `.gitignore`: são dados de outros jogadores e ficam só na máquina de quem tem o arquivo.
 
+## Rodar tudo no seu PC (sem publicar nada)
+
+O mesmo Worker e o mesmo banco rodam offline pelo wrangler. Não precisa de conta na Cloudflare,
+nem cartão, e nada sai da sua máquina.
+
+```bash
+npm install
+npm run db:init                                   # cria o banco local (arquivo em .wrangler/)
+npm run dev                                       # servidor em http://localhost:8787
+node scripts/import-local.mjs hands_dLzinN.txt    # manda o histórico para o servidor local
+```
+
+Abra `http://localhost:8787`, busque o jogador e o HUD aparece. No modo local o Worker roda com
+`DEV_USER`, que dispensa o login do Cloudflare Access; essa variável é passada na linha de comando
+do `npm run dev` e nunca fica no `wrangler.jsonc`, então um deploy sempre exige login de verdade.
+
+Medido com as 46.768 mãos do dLzinN, tudo local:
+
+| | Tempo / tamanho |
+|---|---|
+| Importar o arquivo de 78 MB | 14 segundos |
+| Banco (D1 local) | 9,8 MB |
+| Históricos guardados (gzip) | 8,1 MB |
+
+Projetando pelo mesmo arquivo:
+
+| Mãos | Banco | Históricos gzip |
+|---|---|---|
+| 1 milhão | ~210 MB | ~170 MB |
+| 10 milhões | ~2,1 GB | ~1,7 GB |
+| 50 milhões | ~10 GB | ~8,5 GB |
+
+Ou seja, no seu PC cabe tudo. Se um dia for para a nuvem, o plano grátis do D1 tem 5 GB
+(o suficiente para cerca de 20 milhões de mãos) e o Workers Paid (US$ 5/mês) é o que libera
+o volume de escrita para importar arquivos grandes sem travar.
+
 ## Estrutura
 
 | Arquivo | O que é |
@@ -59,6 +95,8 @@ node scripts/preview.mjs # abre a tela em http://localhost:8790 com dados do rec
 | `worker.ts` | API na Cloudflare: upload, busca, stats, regs, recálculo |
 | `schema.sql` | tabelas do D1 |
 | `public/` | HTML e o bundle da tela |
+| `scripts/import-local.mjs` | manda um histórico para o servidor local |
+| `scripts/preview.mjs` | abre só a tela, com dados do recorte |
 | `docs/PLAN.md` | plano, decisões de arquitetura e de design |
 | `DESIGN.md` | cores, fonte e tamanhos tirados do H2N |
 
