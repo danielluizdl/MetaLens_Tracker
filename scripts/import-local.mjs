@@ -1,11 +1,20 @@
 // Sends a hand history file to the local Worker (npm run dev), in chunks of whole hands.
-// Usage: node scripts/import-local.mjs hands_dLzinN.txt [http://localhost:8787]
+// Usage: ML_EMAIL=you@team ML_PASS=secret node scripts/import-local.mjs hands_dLzinN.txt [http://localhost:8787]
+// Uploading is admin-only, so it signs in first and reuses the session cookie.
 import { readFileSync, statSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 
 const [file, base = 'http://localhost:8787'] = process.argv.slice(2);
-if (!file) { console.error('usage: node scripts/import-local.mjs <file.txt> [base-url]'); process.exit(1); }
+if (!file) { console.error('usage: ML_EMAIL=… ML_PASS=… node scripts/import-local.mjs <file.txt> [base-url]'); process.exit(1); }
+
+const { ML_EMAIL, ML_PASS } = process.env;
+let cookie = '';
+if (ML_EMAIL && ML_PASS) {
+  const res = await fetch(`${base}/api/login`, { method: 'POST', body: JSON.stringify({ email: ML_EMAIL, pass: ML_PASS }) });
+  if (!res.ok) { console.error('login falhou:', (await res.json()).error); process.exit(1); }
+  cookie = res.headers.get('set-cookie')?.split(';')[0] ?? '';
+}
 
 const CHUNK = 4 * 1024 * 1024;
 const text = readFileSync(file, 'utf8');
@@ -23,7 +32,7 @@ console.log(`${file}: ${(statSync(file).size / 1e6).toFixed(1)} MB, ${starts.len
 const total = { new: 0, dup: 0, rejected: 0 };
 const started = Date.now();
 for (const [i, chunk] of chunks.entries()) {
-  const res = await fetch(`${base}/api/upload?sha=${sha}&part=${i}`, { method: 'POST', body: gzipSync(chunk) });
+  const res = await fetch(`${base}/api/upload?sha=${sha}&part=${i}`, { method: 'POST', body: gzipSync(chunk), headers: cookie ? { cookie } : {} });
   const body = await res.json();
   if (!res.ok) { console.error(`chunk ${i + 1}: ${res.status} ${JSON.stringify(body)}`); process.exit(1); }
   total.new += body.new; total.dup += body.dup; total.rejected += body.rejected;

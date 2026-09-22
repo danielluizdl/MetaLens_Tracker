@@ -7,7 +7,7 @@
     "build:ui": "node -e \"require('esbuild').build({entryPoints:['src/ui.ts'],bundle:true,format:'esm',minify:true,outfile:'public/app.js'}).catch(()=>process.exit(1))\"",
     "fixture": "node scripts/make-fixture.mjs",
     "db:init": "npx wrangler d1 execute metalens --local --file schema.sql",
-    "dev": "npm run build:ui && npx wrangler dev --local --var DEV_USER:eu@local --var ADMINS:eu@local",
+    "dev": "npm run build:ui && npx wrangler dev --local",
     "import": "node scripts/import-local.mjs"
   },
   "devDependencies": {

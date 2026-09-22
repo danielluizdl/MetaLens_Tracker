@@ -58,9 +58,8 @@ npm run dev                                       # servidor em http://localhost
 node scripts/import-local.mjs hands_dLzinN.txt    # manda o histórico para o servidor local
 ```
 
-Abra `http://localhost:8787`, busque o jogador e o HUD aparece. No modo local o Worker roda com
-`DEV_USER`, que dispensa o login do Cloudflare Access; essa variável é passada na linha de comando
-do `npm run dev` e nunca fica no `wrangler.jsonc`, então um deploy sempre exige login de verdade.
+Abra `http://localhost:8787`, crie a primeira conta (ela vira admin), suba as mãos pelo painel
+"Subir mãos" e escolha um jogador na coluna da esquerda.
 
 Medido com as 46.768 mãos do dLzinN, tudo local:
 
@@ -82,22 +81,31 @@ Ou seja, no seu PC cabe tudo. Se um dia for para a nuvem, o plano grátis do D1 
 (o suficiente para cerca de 20 milhões de mãos) e o Workers Paid (US$ 5/mês) é o que libera
 o volume de escrita para importar arquivos grandes sem travar.
 
-### Comandos úteis (modo local)
+### Contas e comandos úteis (modo local)
+
+A **primeira conta criada vira admin**. Depois disso, novas contas só entram com um código de
+convite gerado pelo admin no painel "Admin".
+
+| Tipo | Pode |
+|---|---|
+| admin | tudo: subir mãos, gerar convites, mudar o tipo das contas, recalcular |
+| player | buscar jogadores e ver o HUD |
 
 ```bash
+# subir mãos pelo terminal (login de admin)
+ML_EMAIL=voce@time ML_PASS=suasenha node scripts/import-local.mjs hands_dLzinN.txt
+
 # marcar jogadores do time (esconde o bb/100 deles no HUD)
 npx wrangler d1 execute metalens --local --command "INSERT OR IGNORE INTO team (site, nick) VALUES ('PokerKing','dLzinN')"
 
-# carregar a lista de regs quando ela existir (um nick por linha em regs.txt)
-node -e "const fs=require('fs');const n=fs.readFileSync('regs.txt','utf8').split(/?
-/).filter(Boolean);fs.writeFileSync('regs.sql',n.map(x=>`INSERT OR IGNORE INTO regs (site,nick) VALUES ('PokerKing','''+x.replace(/'/g,"''")+''');`).join('
-'))" && npx wrangler d1 execute metalens --local --file regs.sql
+# carregar a lista de regs do H2N (um nick por linha)
+node scripts/load-regs.mjs regs.txt
 
 # recalcular tudo a partir dos históricos guardados (depois de mudar uma stat ou a lista de regs)
-curl -X POST "http://localhost:8787/api/admin/rebuild"   # repita passando ?cursor=... enquanto vier cursor
+curl -X POST "http://localhost:8787/api/admin/rebuild"   # repita com ?cursor=... enquanto vier cursor
 
 # ver o que já foi importado
-npx wrangler d1 execute metalens --local --command "SELECT count(*) hands FROM hands; SELECT user, sha, part, new, dup, created FROM uploads ORDER BY id DESC LIMIT 5"
+npx wrangler d1 execute metalens --local --command "SELECT count(*) hands FROM hands"
 ```
 
 ## Estrutura
@@ -108,12 +116,13 @@ npx wrangler d1 execute metalens --local --command "SELECT count(*) hands FROM h
 | `src/stats.ts` | calcula as stats no formato `[oportunidade, fez]`, com as regras do H2N |
 | `src/catalog.ts` | as caixas do HUD (título, linhas, colunas, chave, faixa de cor, gabarito) |
 | `src/hud.ts` | cor, formatação e descrição de cada stat (funções puras, testadas) |
-| `src/ui.ts` | a tela: busca, HUD, filtro de stake, "vs reg", upload |
+| `src/ui.ts` | a tela: login, coluna de jogadores, HUD, detalhe da stat, upload e painel admin |
 | `src/report.ts` | comparação com o H2N no terminal |
 | `worker.ts` | API na Cloudflare: upload, busca, stats, regs, recálculo |
 | `schema.sql` | tabelas do D1 |
 | `public/` | HTML e o bundle da tela |
 | `scripts/import-local.mjs` | manda um histórico para o servidor local |
+| `scripts/load-regs.mjs` | carrega a lista de regs do H2N no banco local |
 | `scripts/preview.mjs` | abre só a tela, com dados do recorte |
 | `docs/PLAN.md` | plano, decisões de arquitetura e de design |
 | `DESIGN.md` | cores, fonte e tamanhos tirados do H2N |

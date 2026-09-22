@@ -151,11 +151,32 @@ Derivadas das decisões acima. Marque conforme entregar.
   - Origem: 2, T5
 
 ## Andamento (22/09/2026)
-- T1–T6 prontos: `npm test` = 17 passando, 2 pendências marcadas (postflop e regs).
+- T1–T7 e T9 prontos: `npm test` = 28 passando, 2 pendências marcadas (postflop e regs).
 - Diferença do plano: a tabela `players` saiu; a busca usa o índice de `stats` (nick COLLATE NOCASE).
 - Testes do Worker usam Miniflare 4 (o Miniflare 5 que vem com o wrangler está em alpha).
 - T7 pronto: revisão de design (3/10 → 9/10, 7 decisões), `DESIGN.md`, `public/index.html`, `src/ui.ts` (bundle em `public/app.js`), `src/hud.ts` + testes. Conferido no navegador com `node scripts/preview.mjs`.
-- Falta: T8 (deploy: conta Cloudflare, Workers Paid, D1, R2, Access).
+- T9 pronto: login, papéis, convites, coluna esquerda e detalhe da stat (seção abaixo).
+- Falta: T8 (deploy: conta Cloudflare, Workers Paid, D1, R2, Access) — opcional enquanto rodar só no PC.
+
+## T9 — Contas, papéis e coluna de jogadores (22/09/2026)
+
+Pedido do usuário: estética do `metalens-br.vercel.app`, login com tipos de conta,
+coluna à **esquerda** com os nicks da base; clicar no nick abre as stats e cada stat
+abre um detalhe mais profundo.
+
+| # | Decisão |
+|---|---|
+| 1 | Duas formas de entrar: sessão própria (e-mail + senha) e, em produção, o Cloudflare Access. O papel vem sempre da tabela `users`. |
+| 2 | Senha com PBKDF2 (WebCrypto, sem dependência nova); sessão em cookie `ml` assinado com HMAC (`SESSION_SECRET`), HttpOnly + SameSite=Lax. |
+| 3 | Papéis: `admin` (sobe mãos, recalcula, cria convites, muda papel) e `player` (**só consulta**). |
+| 4 | Cadastro por convite: a primeira conta vira admin; as demais exigem um código de uso único gerado por um admin (`invites`). Sem cadastro aberto porque o repositório é público. |
+| 5 | Coluna esquerda: `/api/players` devolve nick + mãos (300 linhas, filtro por início do nick) com barra de disponibilidade da amostra (500 / 1.000 / 2.000 mãos). |
+| 6 | Detalhe da stat: clicar numa célula abre um painel com amostra, faixa do time, valor do H2N, a regra, a quebra por stake e as demais células da mesma caixa. Sem gráfico e sem lista de mãos — o banco local não guarda o texto da mão por jogador. |
+| 7 | Estética Meta Lens (fundo `#0b0c10`, painel `#14161b`, destaque `#e8564d`, Outfit + IBM Plex Mono) aplicada por cima do **layout do H2N**, que continua sendo o do HUD. |
+
+Testes que travam isso (`worker.test.ts`): primeira conta vira admin, convite obrigatório e de uso único,
+senha curta recusada, login errado dá 401, cookie adulterado não autentica, `player` recebe 403 em
+upload/convites/usuários/recálculo e 200 na leitura, e a coluna vem ordenada por mãos.
 
 ## Design da tela (revisão de design, 22/09/2026)
 
