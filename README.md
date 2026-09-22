@@ -82,6 +82,24 @@ Ou seja, no seu PC cabe tudo. Se um dia for para a nuvem, o plano grátis do D1 
 (o suficiente para cerca de 20 milhões de mãos) e o Workers Paid (US$ 5/mês) é o que libera
 o volume de escrita para importar arquivos grandes sem travar.
 
+### Comandos úteis (modo local)
+
+```bash
+# marcar jogadores do time (esconde o bb/100 deles no HUD)
+npx wrangler d1 execute metalens --local --command "INSERT OR IGNORE INTO team (site, nick) VALUES ('PokerKing','dLzinN')"
+
+# carregar a lista de regs quando ela existir (um nick por linha em regs.txt)
+node -e "const fs=require('fs');const n=fs.readFileSync('regs.txt','utf8').split(/?
+/).filter(Boolean);fs.writeFileSync('regs.sql',n.map(x=>`INSERT OR IGNORE INTO regs (site,nick) VALUES ('PokerKing','''+x.replace(/'/g,"''")+''');`).join('
+'))" && npx wrangler d1 execute metalens --local --file regs.sql
+
+# recalcular tudo a partir dos históricos guardados (depois de mudar uma stat ou a lista de regs)
+curl -X POST "http://localhost:8787/api/admin/rebuild"   # repita passando ?cursor=... enquanto vier cursor
+
+# ver o que já foi importado
+npx wrangler d1 execute metalens --local --command "SELECT count(*) hands FROM hands; SELECT user, sha, part, new, dup, created FROM uploads ORDER BY id DESC LIMIT 5"
+```
+
 ## Estrutura
 
 | Arquivo | O que é |
