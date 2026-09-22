@@ -3,108 +3,199 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MetaLens Tracker</title>
+<title>Meta Lens — Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg:#1e1e1e; --panel:#2b2b2b; --panel-head:#333; --border:#5a5a5a;
-    --title:#d8d8d8; --label:#e8e8e8; --muted:#8a8a8a; --range:#7d7d7d; --dim:#5f5f5f;
-    --below:#3aa0f0; --inside:#5cc25c; --above:#e3c42a; --far:#e05555; --accent:#e8a33d;
+    --bg:#0b0c10; --panel:#14161b; --panel-2:#1c1f26; --raise:#232730; --border:#2d3240;
+    --text:#e8e9ee; --muted:#8a8f9c; --dim:#5a5f6b;
+    --accent:#e8564d; --blue:#5b9bd5; --green:#4caf7d; --yellow:#f5c518; --purple:#b07fe8;
+    --below:var(--blue); --inside:var(--green); --above:var(--yellow); --far:var(--accent);
     color-scheme: dark;
   }
-  * { box-sizing: border-box; }
-  body {
-    margin:0; background:var(--bg); color:var(--label);
-    font:13px/1.4 "Segoe UI", system-ui, sans-serif; font-variant-numeric: tabular-nums;
-    scrollbar-color:#4a4a4a var(--panel);
-  }
-  ::selection { background:var(--accent); color:#111; }
-  :focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
-  button, input { font:inherit; color:inherit; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 Outfit, system-ui, sans-serif; }
+  .num, td, th.n { font-family:"IBM Plex Mono", ui-monospace, monospace; font-variant-numeric:tabular-nums; }
+  ::selection { background:var(--accent); color:#fff; }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  button, input, select { font:inherit; color:inherit; }
+  button { cursor:pointer; }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:var(--raise); border-radius:6px; }
+  ::-webkit-scrollbar-track { background:var(--panel); }
 
-  header { display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:8px 12px; background:var(--panel-head); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:5; }
-  .brand { font-weight:700; letter-spacing:.5px; color:var(--title); margin-right:4px; }
-  .search { position:relative; flex:1 1 260px; max-width:420px; }
-  .search input { width:100%; min-height:44px; padding:6px 10px; background:#222; border:1px solid var(--border); }
-  .results { position:absolute; left:0; right:0; top:100%; background:var(--panel); border:1px solid var(--border); max-height:320px; overflow:auto; z-index:10; }
-  .results button { display:flex; justify-content:space-between; gap:12px; width:100%; min-height:44px; padding:6px 10px; background:none; border:0; border-bottom:1px solid #3a3a3a; text-align:left; cursor:pointer; }
-  .results button:hover, .results button[aria-selected=true] { background:#3a3a3a; }
-  .results .hands { color:var(--muted); }
-  select, .btn { min-height:44px; padding:4px 10px; background:#222; border:1px solid var(--border); cursor:pointer; }
-  label.toggle { display:flex; align-items:center; gap:6px; min-height:44px; cursor:pointer; }
+  /* ---------- login ---------- */
+  #login { min-height:100dvh; display:grid; place-items:center; padding:20px; }
+  .card { width:min(420px,100%); background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:26px; }
+  .logo { display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:22px; }
+  .logo .mark { width:38px; height:38px; border-radius:10px; background:linear-gradient(145deg,#7a1f1b,#e8564d); display:grid; place-items:center; font-size:19px; }
+  .logo b { font-size:22px; font-weight:600; letter-spacing:.2px; }
+  .tabs { display:flex; background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:4px; margin-bottom:18px; }
+  .tabs button { flex:1; min-height:38px; border:0; border-radius:7px; background:none; color:var(--muted); font-weight:500; }
+  .tabs button[aria-selected=true] { background:var(--raise); color:var(--text); }
+  .field { width:100%; min-height:44px; margin-bottom:12px; padding:10px 12px; background:var(--panel-2); border:1px solid var(--border); border-radius:9px; }
+  .field::placeholder { color:var(--dim); }
+  .primary { width:100%; min-height:46px; border:0; border-radius:9px; background:var(--accent); color:#fff; font-weight:600; }
+  .primary:hover { filter:brightness(1.08); }
+  .hint { margin-top:12px; color:var(--muted); font-size:13px; text-align:center; }
+  .msg { margin-bottom:12px; padding:9px 11px; border-radius:9px; background:rgba(232,86,77,.15); border:1px solid var(--accent); color:#ffd9d6; font-size:13px; }
+
+  /* ---------- app shell ---------- */
+  #app { display:none; min-height:100dvh; grid-template-rows:auto 1fr; }
+  header { display:flex; gap:12px; align-items:center; padding:10px 16px; background:var(--panel); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:5; }
+  header .logo { margin:0; gap:8px; }
+  header .logo .mark { width:28px; height:28px; border-radius:8px; font-size:15px; }
+  header .logo b { font-size:16px; }
+  .search { position:relative; flex:1 1 280px; max-width:460px; }
+  .search input { width:100%; min-height:40px; padding:8px 12px; background:var(--panel-2); border:1px solid var(--border); border-radius:9px; }
+  .results { position:absolute; inset:calc(100% + 4px) 0 auto 0; background:var(--panel-2); border:1px solid var(--border); border-radius:10px; max-height:340px; overflow:auto; z-index:10; }
+  .results button, .plist button { display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%; min-height:44px; padding:8px 12px; background:none; border:0; text-align:left; }
+  .results button:hover, .plist button:hover, .plist button[aria-current=true] { background:var(--raise); }
+  .grow { flex:1; }
+  .ghost { min-height:40px; padding:8px 14px; background:var(--panel-2); border:1px solid var(--border); border-radius:9px; color:var(--text); }
+  .who-am-i { color:var(--muted); font-size:13px; }
+  .tag { padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; background:var(--raise); color:var(--muted); }
+  .tag.admin { background:rgba(232,86,77,.18); color:#ff9b93; }
+
+  .body { display:grid; grid-template-columns:270px 1fr; min-height:0; }
+  aside.players { border-right:1px solid var(--border); background:var(--panel); display:flex; flex-direction:column; max-height:calc(100dvh - 61px); position:sticky; top:61px; }
+  aside.players h2 { margin:0; padding:12px 14px 8px; font-size:12px; font-weight:600; letter-spacing:.8px; text-transform:uppercase; color:var(--muted); }
+  aside.players .filter { margin:0 12px 8px; }
+  aside.players .filter input { width:100%; min-height:38px; padding:7px 10px; background:var(--panel-2); border:1px solid var(--border); border-radius:8px; }
+  .plist { overflow:auto; padding-bottom:12px; }
+  .plist .nick { display:flex; flex-direction:column; gap:4px; min-width:0; }
+  .plist .nick span:first-child { overflow:hidden; text-overflow:ellipsis; }
+  .plist .hands { color:var(--muted); font-size:12px; }
+  .avail { display:flex; gap:3px; }
+  .avail i { width:16px; height:4px; border-radius:2px; background:var(--raise); }
+  .avail i.on { background:var(--green); }
+  .avail i.half { background:var(--yellow); }
+
+  main { padding:14px 16px 60px; min-width:0; }
+  .who { display:flex; flex-wrap:wrap; gap:10px; align-items:baseline; margin-bottom:10px; }
+  .who h1 { margin:0; font-size:22px; font-weight:600; }
+  .who .meta { color:var(--muted); font-size:13px; }
+  nav.screens { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+  nav.screens button { min-height:38px; padding:7px 14px; background:var(--panel); border:1px solid var(--border); border-radius:999px; color:var(--muted); font-weight:500; }
+  nav.screens button[aria-current=true] { background:var(--raise); color:var(--text); border-color:var(--raise); }
+  .toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+  .toolbar select { min-height:38px; padding:6px 10px; background:var(--panel); border:1px solid var(--border); border-radius:9px; }
+  label.toggle { display:flex; align-items:center; gap:7px; min-height:38px; color:var(--muted); }
   label.toggle input { width:16px; height:16px; accent-color:var(--accent); }
-  label.toggle[aria-disabled=true] { color:var(--dim); cursor:not-allowed; }
-  .spacer { flex:1; }
 
-  .who { padding:6px 12px; color:var(--muted); border-bottom:1px solid var(--border); }
-  .who b { color:var(--label); font-size:15px; }
-  nav { display:flex; gap:2px; padding:6px 12px 0; }
-  nav button { min-height:44px; padding:6px 14px; background:none; border:0; border-bottom:2px solid transparent; color:var(--muted); cursor:pointer; letter-spacing:.5px; }
-  nav button[aria-current=true] { color:var(--title); border-bottom-color:var(--accent); }
-
-  main { padding:10px 12px 40px; }
-  .boxes { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-start; }
-  .box { background:var(--panel); border:1px solid var(--border); min-width:150px; }
-  .box > h2 { margin:0; padding:6px 10px; font-size:15px; font-weight:600; color:var(--title); text-align:center; letter-spacing:.5px; border-bottom:1px solid var(--border); }
+  .boxes { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start; }
+  .box { background:var(--panel); border:1px solid var(--border); border-radius:12px; overflow:hidden; min-width:158px; }
+  .box > h2 { margin:0; padding:9px 12px; font-size:12px; font-weight:600; letter-spacing:.8px; text-transform:uppercase; color:var(--muted); text-align:center; background:var(--panel-2); border-bottom:1px solid var(--border); }
   .grid-wrap { overflow-x:auto; }
   table { border-collapse:collapse; }
-  th, td { padding:4px 6px; text-align:center; white-space:nowrap; }
-  th { font-weight:600; color:var(--label); font-size:12px; }
-  th.row { position:sticky; left:0; background:var(--panel); text-align:right; }
-  td { cursor:help; }
-  .v { font-size:15px; font-weight:700; }
-  .s { font-size:9px; color:var(--muted); margin-left:2px; vertical-align:super; }
-  .r { display:block; font-size:9px; color:var(--range); }
+  th, td { padding:5px 8px; text-align:center; white-space:nowrap; }
+  th { font-size:11px; font-weight:600; color:var(--muted); }
+  th.row { position:sticky; left:0; background:var(--panel); text-align:right; color:var(--text); }
+  td.cell { cursor:pointer; border-radius:6px; }
+  td.cell:hover { background:var(--panel-2); }
+  .v { font-size:15px; font-weight:600; }
+  .s { font-size:9px; color:var(--muted); margin-left:3px; vertical-align:super; }
+  .r { display:block; font-size:9px; color:var(--dim); }
   .below .v { color:var(--below); } .inside .v { color:var(--inside); }
   .above .v { color:var(--above); } .far .v { color:var(--far); }
-  .dim .v, .none .v { color:var(--dim); } .plain .v { color:var(--label); }
+  .dim .v, .none .v { color:var(--dim); } .plain .v { color:var(--text); }
 
-  .home { padding:24px 12px; color:var(--muted); }
-  .home h2 { color:var(--title); font-size:16px; font-weight:600; }
-  .recent { display:flex; flex-wrap:wrap; gap:8px; }
-  .recent button { min-height:44px; padding:6px 12px; background:var(--panel); border:1px solid var(--border); cursor:pointer; }
-  .error { margin:10px 12px; padding:8px 10px; background:#40201f; border:1px solid var(--far); color:#f0c0c0; }
-  .loading { color:var(--muted); padding:10px 12px; }
+  .empty { padding:30px 4px; color:var(--muted); }
+  .empty h2 { color:var(--text); font-size:18px; font-weight:600; margin:0 0 6px; }
+  .error { margin-bottom:12px; padding:9px 12px; border-radius:9px; background:rgba(232,86,77,.15); border:1px solid var(--accent); color:#ffd9d6; }
+  .loading { color:var(--muted); padding:10px 2px; }
 
-  #drawer { position:fixed; top:0; right:0; bottom:0; width:min(420px, 100%); background:var(--panel); border-left:1px solid var(--border); padding:12px; transform:translateX(100%); transition:transform .15s ease-out; overflow:auto; }
-  #drawer[open] { transform:none; }
-  @media (prefers-reduced-motion: reduce) { #drawer { transition:none; } }
-  #drawer h2 { margin-top:0; color:var(--title); font-size:16px; }
-  .bar { height:6px; background:#222; border:1px solid var(--border); }
+  /* ---------- side panels: stat detail, upload, admin ---------- */
+  .panel { position:fixed; top:0; right:0; bottom:0; width:min(460px,100%); background:var(--panel); border-left:1px solid var(--border); padding:18px; overflow:auto; transform:translateX(100%); transition:transform .16s ease-out; z-index:20; }
+  .panel[open] { transform:none; }
+  @media (prefers-reduced-motion:reduce) { .panel { transition:none; } }
+  .panel h2 { margin:0 0 4px; font-size:18px; font-weight:600; }
+  .panel .sub { color:var(--muted); font-size:13px; margin-bottom:14px; }
+  .panel .close { position:absolute; top:14px; right:14px; background:none; border:0; color:var(--muted); font-size:20px; }
+  .big { font-size:34px; font-weight:600; }
+  .kv { display:grid; grid-template-columns:auto 1fr; gap:6px 14px; margin:14px 0; color:var(--muted); font-size:13px; }
+  .kv b { color:var(--text); font-weight:500; }
+  .rule { padding:10px 12px; background:var(--panel-2); border:1px solid var(--border); border-radius:9px; color:var(--muted); font-size:13px; }
+  .panel table { width:100%; margin-top:10px; }
+  .panel td, .panel th { text-align:right; padding:5px 6px; border-bottom:1px solid var(--border); }
+  .panel th:first-child, .panel td:first-child { text-align:left; }
+  .bar { height:6px; background:var(--panel-2); border:1px solid var(--border); border-radius:4px; overflow:hidden; margin:10px 0; }
   .bar > i { display:block; height:100%; background:var(--accent); width:0; }
-  .log { margin-top:10px; font-size:12px; color:var(--muted); white-space:pre-wrap; }
+  .log { font-size:12px; color:var(--muted); white-space:pre-wrap; }
+  .code { font-family:"IBM Plex Mono", monospace; background:var(--panel-2); border:1px solid var(--border); border-radius:8px; padding:6px 10px; display:inline-block; }
+
   @media (max-width: 900px) {
-    .boxes { display:block; }
-    .box { margin-bottom:10px; }
-    .box table { width:100%; }
-    th.row { text-align:left; }
+    .body { grid-template-columns:1fr; }
+    aside.players { position:static; max-height:280px; border-right:0; border-bottom:1px solid var(--border); }
+    .boxes { display:block; } .box { margin-bottom:12px; } .box table { width:100%; } th.row { text-align:left; }
   }
 </style>
 </head>
 <body>
-<header>
-  <span class="brand">METALENS</span>
-  <div class="search">
-    <input id="q" type="search" placeholder="buscar jogador…" autocomplete="off" aria-label="Buscar jogador" autofocus>
-    <div id="results" class="results" role="listbox" hidden></div>
+
+<section id="login">
+  <div class="card">
+    <div class="logo"><span class="mark">🔍</span><b>Meta Lens</b></div>
+    <div class="tabs" role="tablist">
+      <button id="tabIn" role="tab" aria-selected="true">Entrar</button>
+      <button id="tabUp" role="tab" aria-selected="false">Criar conta</button>
+    </div>
+    <div id="loginMsg" class="msg" hidden></div>
+    <form id="loginForm">
+      <input class="field" id="email" type="email" placeholder="E-mail" autocomplete="email" required>
+      <input class="field" id="pass" type="password" placeholder="Senha" autocomplete="current-password" required>
+      <input class="field" id="code" type="text" placeholder="Código de convite" hidden>
+      <button class="primary" type="submit" id="loginBtn">Entrar</button>
+    </form>
+    <p class="hint" id="loginHint">Acesso só para o time.</p>
   </div>
-  <select id="stake" aria-label="Stake"><option value="">Todas as stakes</option></select>
-  <label class="toggle" id="regWrap"><input type="checkbox" id="vsreg"> vs reg</label>
-  <span class="spacer"></span>
-  <button class="btn" id="openUpload">Subir mãos</button>
-</header>
+</section>
 
-<div id="who" class="who" hidden></div>
-<nav id="tabs" hidden></nav>
-<div id="error" class="error" hidden></div>
-<main id="main"></main>
+<div id="app">
+  <header>
+    <div class="logo"><span class="mark">🔍</span><b>Meta Lens</b></div>
+    <div class="search">
+      <input id="q" type="search" placeholder="buscar jogador…" autocomplete="off" aria-label="Buscar jogador">
+      <div id="results" class="results" role="listbox" hidden></div>
+    </div>
+    <span class="grow"></span>
+    <span class="who-am-i" id="meLabel"></span>
+    <button class="ghost" id="openAdmin" hidden>Admin</button>
+    <button class="ghost" id="openUpload" hidden>Subir mãos</button>
+    <button class="ghost" id="logout">Sair</button>
+  </header>
 
-<aside id="drawer" aria-label="Subir mãos">
+  <div class="body">
+    <aside class="players">
+      <h2>Jogadores na base</h2>
+      <div class="filter"><input id="pfilter" type="search" placeholder="filtrar nicks…" aria-label="Filtrar jogadores"></div>
+      <div class="plist" id="plist"></div>
+    </aside>
+    <main id="main"></main>
+  </div>
+</div>
+
+<aside class="panel" id="detail" aria-label="Detalhe da stat">
+  <button class="close" id="closeDetail" aria-label="Fechar">×</button>
+  <div id="detailBody"></div>
+</aside>
+
+<aside class="panel" id="upload" aria-label="Subir mãos">
+  <button class="close" id="closeUpload" aria-label="Fechar">×</button>
   <h2>Subir mãos</h2>
-  <p>Arquivo .txt de histórico (PokerKing). Mãos repetidas são ignoradas.</p>
+  <p class="sub">Arquivo .txt de histórico (PokerKing). Mãos repetidas são ignoradas.</p>
   <input type="file" id="file" accept=".txt" multiple>
   <div class="bar"><i id="prog"></i></div>
   <div class="log" id="uplog"></div>
-  <button class="btn" id="closeUpload" style="margin-top:10px">Fechar</button>
+</aside>
+
+<aside class="panel" id="admin" aria-label="Administração">
+  <button class="close" id="closeAdmin" aria-label="Fechar">×</button>
+  <h2>Administração</h2>
+  <p class="sub">Convites e contas do time.</p>
+  <div id="adminBody"></div>
 </aside>
 
 <script type="module" src="/app.js"></script>
