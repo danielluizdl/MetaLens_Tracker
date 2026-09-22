@@ -53,13 +53,19 @@ nem cartão, e nada sai da sua máquina.
 
 ```bash
 npm install
-npm run db:init                                   # cria o banco local (arquivo em .wrangler/)
-npm run dev                                       # servidor em http://localhost:8787
-node scripts/import-local.mjs hands_dLzinN.txt    # manda o histórico para o servidor local
+npm run db:init            # cria o banco local (arquivo em .wrangler/)
+npm run dev                # servidor em http://localhost:8787 (deixe esta janela aberta)
 ```
 
-Abra `http://localhost:8787`, crie a primeira conta (ela vira admin), suba as mãos pelo painel
-"Subir mãos" e escolha um jogador na coluna da esquerda.
+Abra `http://localhost:8787` e crie a primeira conta — ela vira admin. Depois suba as mãos, pelo
+painel "Subir mãos" da tela ou, para arquivos grandes, pelo terminal (em outra janela, com o
+servidor rodando):
+
+```bash
+ML_EMAIL=voce@exemplo ML_PASS=suasenha node scripts/import-local.mjs hands_dLzinN.txt
+```
+
+Escolha um jogador na coluna da esquerda e clique numa stat para ver o detalhe.
 
 Medido com as 46.768 mãos do dLzinN, tudo local:
 
