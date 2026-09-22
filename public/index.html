@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MetaLens Tracker</title>
+<style>
+  :root {
+    --bg:#1e1e1e; --panel:#2b2b2b; --panel-head:#333; --border:#5a5a5a;
+    --title:#d8d8d8; --label:#e8e8e8; --muted:#8a8a8a; --range:#7d7d7d; --dim:#5f5f5f;
+    --below:#3aa0f0; --inside:#5cc25c; --above:#e3c42a; --far:#e05555; --accent:#e8a33d;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin:0; background:var(--bg); color:var(--label);
+    font:13px/1.4 "Segoe UI", system-ui, sans-serif; font-variant-numeric: tabular-nums;
+    scrollbar-color:#4a4a4a var(--panel);
+  }
+  ::selection { background:var(--accent); color:#111; }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+  button, input { font:inherit; color:inherit; }
+
+  header { display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:8px 12px; background:var(--panel-head); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:5; }
+  .brand { font-weight:700; letter-spacing:.5px; color:var(--title); margin-right:4px; }
+  .search { position:relative; flex:1 1 260px; max-width:420px; }
+  .search input { width:100%; min-height:44px; padding:6px 10px; background:#222; border:1px solid var(--border); }
+  .results { position:absolute; left:0; right:0; top:100%; background:var(--panel); border:1px solid var(--border); max-height:320px; overflow:auto; z-index:10; }
+  .results button { display:flex; justify-content:space-between; gap:12px; width:100%; min-height:44px; padding:6px 10px; background:none; border:0; border-bottom:1px solid #3a3a3a; text-align:left; cursor:pointer; }
+  .results button:hover, .results button[aria-selected=true] { background:#3a3a3a; }
+  .results .hands { color:var(--muted); }
+  select, .btn { min-height:44px; padding:4px 10px; background:#222; border:1px solid var(--border); cursor:pointer; }
+  label.toggle { display:flex; align-items:center; gap:6px; min-height:44px; cursor:pointer; }
+  label.toggle input { width:16px; height:16px; accent-color:var(--accent); }
+  label.toggle[aria-disabled=true] { color:var(--dim); cursor:not-allowed; }
+  .spacer { flex:1; }
+
+  .who { padding:6px 12px; color:var(--muted); border-bottom:1px solid var(--border); }
+  .who b { color:var(--label); font-size:15px; }
+  nav { display:flex; gap:2px; padding:6px 12px 0; }
+  nav button { min-height:44px; padding:6px 14px; background:none; border:0; border-bottom:2px solid transparent; color:var(--muted); cursor:pointer; letter-spacing:.5px; }
+  nav button[aria-current=true] { color:var(--title); border-bottom-color:var(--accent); }
+
+  main { padding:10px 12px 40px; }
+  .boxes { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-start; }
+  .box { background:var(--panel); border:1px solid var(--border); min-width:150px; }
+  .box > h2 { margin:0; padding:6px 10px; font-size:15px; font-weight:600; color:var(--title); text-align:center; letter-spacing:.5px; border-bottom:1px solid var(--border); }
+  .grid-wrap { overflow-x:auto; }
+  table { border-collapse:collapse; }
+  th, td { padding:4px 6px; text-align:center; white-space:nowrap; }
+  th { font-weight:600; color:var(--label); font-size:12px; }
+  th.row { position:sticky; left:0; background:var(--panel); text-align:right; }
+  td { cursor:help; }
+  .v { font-size:15px; font-weight:700; }
+  .s { font-size:9px; color:var(--muted); margin-left:2px; vertical-align:super; }
+  .r { display:block; font-size:9px; color:var(--range); }
+  .below .v { color:var(--below); } .inside .v { color:var(--inside); }
+  .above .v { color:var(--above); } .far .v { color:var(--far); }
+  .dim .v, .none .v { color:var(--dim); } .plain .v { color:var(--label); }
+
+  .home { padding:24px 12px; color:var(--muted); }
+  .home h2 { color:var(--title); font-size:16px; font-weight:600; }
+  .recent { display:flex; flex-wrap:wrap; gap:8px; }
+  .recent button { min-height:44px; padding:6px 12px; background:var(--panel); border:1px solid var(--border); cursor:pointer; }
+  .error { margin:10px 12px; padding:8px 10px; background:#40201f; border:1px solid var(--far); color:#f0c0c0; }
+  .loading { color:var(--muted); padding:10px 12px; }
+
+  #drawer { position:fixed; top:0; right:0; bottom:0; width:min(420px, 100%); background:var(--panel); border-left:1px solid var(--border); padding:12px; transform:translateX(100%); transition:transform .15s ease-out; overflow:auto; }
+  #drawer[open] { transform:none; }
+  @media (prefers-reduced-motion: reduce) { #drawer { transition:none; } }
+  #drawer h2 { margin-top:0; color:var(--title); font-size:16px; }
+  .bar { height:6px; background:#222; border:1px solid var(--border); }
+  .bar > i { display:block; height:100%; background:var(--accent); width:0; }
+  .log { margin-top:10px; font-size:12px; color:var(--muted); white-space:pre-wrap; }
+  @media (max-width: 900px) {
+    .boxes { display:block; }
+    .box { margin-bottom:10px; }
+    .box table { width:100%; }
+    th.row { text-align:left; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <span class="brand">METALENS</span>
+  <div class="search">
+    <input id="q" type="search" placeholder="buscar jogador…" autocomplete="off" aria-label="Buscar jogador" autofocus>
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <select id="stake" aria-label="Stake"><option value="">Todas as stakes</option></select>
+  <label class="toggle" id="regWrap"><input type="checkbox" id="vsreg"> vs reg</label>
+  <span class="spacer"></span>
+  <button class="btn" id="openUpload">Subir mãos</button>
+</header>
+
+<div id="who" class="who" hidden></div>
+<nav id="tabs" hidden></nav>
+<div id="error" class="error" hidden></div>
+<main id="main"></main>
+
+<aside id="drawer" aria-label="Subir mãos">
+  <h2>Subir mãos</h2>
+  <p>Arquivo .txt de histórico (PokerKing). Mãos repetidas são ignoradas.</p>
+  <input type="file" id="file" accept=".txt" multiple>
+  <div class="bar"><i id="prog"></i></div>
+  <div class="log" id="uplog"></div>
+  <button class="btn" id="closeUpload" style="margin-top:10px">Fechar</button>
+</aside>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>
