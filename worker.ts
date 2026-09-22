@@ -31,7 +31,11 @@ export interface Env {
   DEV_USER?: string;       // local only: skips Access and acts as this user.
                            // Passed on the command line (npm run dev), never in wrangler.jsonc,
                            // so a deployed Worker always requires a real Access token.
+  SESSION_SECRET?: string; // signs the session cookie (set a random value in production)
 }
+
+type Role = 'admin' | 'player';
+type User = { email: string; role: Role };
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
@@ -59,6 +63,54 @@ async function accessUser(req: Request, env: Env): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+// ---------- accounts: pbkdf2 passwords + signed session cookie ----------
+const enc = new TextEncoder();
+const b64e = (b: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(b)));
+const ITER = 100_000;
+
+async function hashPassword(pass: string, saltB64?: string) {
+  const salt = saltB64 ? b64(saltB64) : crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: ITER, hash: 'SHA-256' }, key, 256);
+  return ['pbkdf2', ITER, b64e(salt.buffer as ArrayBuffer), b64e(bits)].join('$');
+}
+const checkPassword = async (pass: string, stored: string) =>
+  (await hashPassword(pass, stored.split('$')[2])) === stored;
+
+const sessionKey = (env: Env) =>
+  crypto.subtle.importKey('raw', enc.encode(env.SESSION_SECRET ?? 'dev-secret'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
+
+async function signSession(env: Env, u: User) {
+  const body = btoa(JSON.stringify({ ...u, exp: Date.now() + 30 * 864e5 })).replace(/=+$/, '');
+  const mac = b64e(await crypto.subtle.sign('HMAC', await sessionKey(env), enc.encode(body))).replace(/=+$/, '');
+  return body + '.' + mac;
+}
+async function readSession(env: Env, cookie: string | null): Promise<User | null> {
+  const raw = cookie?.match(/(?:^|;\s*)ml=([^;]+)/)?.[1];
+  const [body, mac] = raw?.split('.') ?? [];
+  if (!body || !mac) return null;
+  try {
+    const ok = await crypto.subtle.verify('HMAC', await sessionKey(env), b64(mac), enc.encode(body));
+    const data = JSON.parse(atob(body));
+    return ok && data.exp > Date.now() ? { email: data.email, role: data.role } : null;
+  } catch { return null; }
+}
+const cookieHeader = (value: string, maxAge = 30 * 86400) =>
+  `ml=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
+const withCookie = (body: unknown, cookie: string) =>
+  new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json', 'set-cookie': cookie } });
+
+/** Signed-in user: session cookie, or local DEV_USER (npm run dev), or a valid Access token. */
+async function currentUser(req: Request, env: Env): Promise<User | null> {
+  const session = await readSession(env, req.headers.get('cookie'));
+  if (session) return session;
+  if (env.DEV_USER) return { email: env.DEV_USER, role: 'admin' };
+  const email = await accessUser(req, env);
+  if (!email) return null;
+  const { results } = await env.DB.prepare('SELECT role FROM users WHERE email = ?1').bind(email).all();
+  return { email, role: ((results[0]?.role as Role) ?? 'player') };
 }
 
 // ---------- regs cache (per isolate, 5 min) ----------
@@ -135,10 +187,82 @@ export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
     if (!url.pathname.startsWith('/api/')) return new Response('not found', { status: 404 });
-    const user = await accessUser(req, env);
-    if (!user) return json({ error: 'login required' }, 401);
     try {
+      // public: login, register (invite code), logout
+      if (url.pathname === '/api/login' && req.method === 'POST') {
+        const { email, pass } = await req.json() as { email: string; pass: string };
+        const { results } = await env.DB.prepare('SELECT email, pass, role FROM users WHERE email = ?1').bind(email ?? '').all();
+        const row = results[0] as { email: string; pass: string; role: Role } | undefined;
+        if (!row || !(await checkPassword(pass ?? '', row.pass))) return json({ error: 'e-mail ou senha inválidos' }, 401);
+        const u: User = { email: row.email, role: row.role };
+        return withCookie(u, cookieHeader(await signSession(env, u)));
+      }
+      if (url.pathname === '/api/register' && req.method === 'POST') {
+        const { email, pass, code } = await req.json() as { email: string; pass: string; code: string };
+        if (!email?.includes('@') || (pass ?? '').length < 8) return json({ error: 'informe um e-mail válido e uma senha de 8 caracteres ou mais' }, 400);
+        const { results: n } = await env.DB.prepare('SELECT count(*) AS n FROM users').all();
+        const first = Number(n[0].n) === 0;
+        let role: Role = 'player';
+        if (first) role = 'admin';  // the first account bootstraps the admin
+        else {
+          const { results } = await env.DB.prepare('SELECT role FROM invites WHERE code = ?1 AND used_by IS NULL').bind(code ?? '').all();
+          if (!results.length) return json({ error: 'código de convite inválido ou já usado' }, 403);
+          role = results[0].role as Role;
+        }
+        try {
+          await env.DB.batch([
+            env.DB.prepare('INSERT INTO users (email, pass, role) VALUES (?1, ?2, ?3)').bind(email, await hashPassword(pass), role),
+            env.DB.prepare("UPDATE invites SET used_by = ?1, used = datetime('now') WHERE code = ?2").bind(email, code ?? ''),
+          ]);
+        } catch (e) {
+          return json({ error: /UNIQUE/i.test(String(e)) ? 'já existe conta com esse e-mail' : String(e) }, 409);
+        }
+        const u: User = { email, role };
+        return withCookie(u, cookieHeader(await signSession(env, u)));
+      }
+      if (url.pathname === '/api/logout') return withCookie({ ok: true }, cookieHeader('', 0));
+
+      const user = await currentUser(req, env);
+      if (url.pathname === '/api/me') return user ? json(user) : json({ error: 'login required' }, 401);
+      if (!user) return json({ error: 'login required' }, 401);
+      const admin = user.role === 'admin';
+      const userEmail = user.email;
+
+      // ---- admin only: invites and users ----
+      if (url.pathname === '/api/invites') {
+        if (!admin) return json({ error: 'só admin' }, 403);
+        if (req.method === 'POST') {
+          const { role = 'player' } = await req.json().catch(() => ({})) as { role?: Role };
+          const code = [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(36)).join('').slice(0, 10).toUpperCase();
+          await env.DB.prepare('INSERT INTO invites (code, role, created_by) VALUES (?1, ?2, ?3)')
+            .bind(code, role === 'admin' ? 'admin' : 'player', userEmail).run();
+          return json({ code, role });
+        }
+        const { results } = await env.DB.prepare('SELECT code, role, created_by, created, used_by FROM invites ORDER BY created DESC LIMIT 50').all();
+        return json(results);
+      }
+      if (url.pathname === '/api/users') {
+        if (!admin) return json({ error: 'só admin' }, 403);
+        if (req.method === 'POST') {
+          const { email, role } = await req.json() as { email: string; role: Role };
+          await env.DB.prepare('UPDATE users SET role = ?2 WHERE email = ?1').bind(email, role === 'admin' ? 'admin' : 'player').run();
+          return json({ ok: true });
+        }
+        const { results } = await env.DB.prepare('SELECT email, role, created FROM users ORDER BY created').all();
+        return json(results);
+      }
+
+      // ---- left column: who is in the base, with sample size ----
+      if (req.method === 'GET' && url.pathname === '/api/players') {
+        const q = (url.searchParams.get('q') ?? '').trim();
+        const like = q.replace(/[\\%_]/g, m => '\\' + m) + '%';
+        const { results } = await env.DB.prepare(
+          "SELECT site, nick, sum(hands) AS hands FROM stats WHERE (?1 = '' OR nick LIKE ?2 ESCAPE '\\') GROUP BY site, nick ORDER BY hands DESC LIMIT 300")
+          .bind(q, like).all();
+        return json(results);
+      }
       if (req.method === 'POST' && url.pathname === '/api/upload') {
+        if (!admin) return json({ error: 'só admin sobe mãos' }, 403);
         const sha = url.searchParams.get('sha') ?? '';
         const part = Number(url.searchParams.get('part'));
         if (!/^[0-9a-f]{64}$/.test(sha) || !Number.isInteger(part) || part < 0 || part > 100_000) return json({ error: 'bad sha/part' }, 400);
@@ -147,7 +271,7 @@ export default {
         let text: string;
         try { text = await gunzip(gz); } catch { return json({ error: 'body must be gzip' }, 400); }
         await env.RAW.put(`uploads/${sha}/${String(part).padStart(5, '0')}.txt.gz`, gz); // raw first
-        return json(await ingest(env, text, user, sha, part));
+        return json(await ingest(env, text, userEmail, sha, part));
       }
       if (req.method === 'GET' && url.pathname === '/api/player') {
         const q = (url.searchParams.get('q') ?? '').trim();
@@ -176,8 +300,7 @@ export default {
         return json({ regs: results[0].n });
       }
       if (req.method === 'POST' && url.pathname === '/api/admin/rebuild') {
-        const admins = (env.ADMINS ?? '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-        if (!admins.includes(user.toLowerCase())) return json({ error: 'admins only' }, 403);
+        if (!admin) return json({ error: 'só admin' }, 403);
         const cursor = url.searchParams.get('cursor') || undefined;
         if (!cursor) await env.DB.batch([env.DB.prepare('DELETE FROM stats'), env.DB.prepare('DELETE FROM hands')]);
         const page = await env.RAW.list({ prefix: 'uploads/', cursor, limit: 1 });
@@ -185,7 +308,7 @@ export default {
         for (const { key } of page.objects) {
           const obj = await env.RAW.get(key);
           const [, sha, part] = key.match(/^uploads\/([0-9a-f]{64})\/(\d+)\.txt\.gz$/) ?? [];
-          if (obj && sha) done.push(await ingest(env, await gunzip(await obj.arrayBuffer()), `rebuild:${user}`, sha, Number(part)));
+          if (obj && sha) done.push(await ingest(env, await gunzip(await obj.arrayBuffer()), `rebuild:${userEmail}`, sha, Number(part)));
         }
         return json({ processed: page.objects.map(o => o.key), results: done, cursor: page.truncated ? page.cursor : null });
       }

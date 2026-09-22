@@ -44,3 +44,21 @@ CREATE TABLE IF NOT EXISTS team (
   nick TEXT NOT NULL COLLATE NOCASE,
   PRIMARY KEY (site, nick)
 );
+
+-- Accounts. Roles: 'admin' (everything) and 'player' (search and read only).
+CREATE TABLE IF NOT EXISTS users (
+  email   TEXT PRIMARY KEY COLLATE NOCASE,
+  pass    TEXT NOT NULL,          -- pbkdf2$<iterations>$<salt b64>$<hash b64>
+  role    TEXT NOT NULL DEFAULT 'player',
+  created TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Invite codes: an admin creates one, a new account consumes it.
+CREATE TABLE IF NOT EXISTS invites (
+  code    TEXT PRIMARY KEY,
+  role    TEXT NOT NULL DEFAULT 'player',
+  created_by TEXT NOT NULL,
+  created TEXT NOT NULL DEFAULT (datetime('now')),
+  used_by TEXT,
+  used    TEXT
+);

@@ -48,6 +48,10 @@ before(async () => {
   const db = await mf.getD1Database('DB');
   for (const stmt of readFileSync('schema.sql', 'utf8').replace(/--.*$/gm, '').split(';').map(s => s.trim()).filter(Boolean))
     await db.prepare(stmt).run();
+  // Access-authenticated users take their role from the users table (uploads are admin-only).
+  for (const [email, role] of [['a@team.com', 'admin'], ['b@team.com', 'admin'], ['c@team.com', 'admin'],
+    ['admin@team.com', 'admin'], ['player@team.com', 'player']])
+    await db.prepare("INSERT INTO users (email, pass, role) VALUES (?1, 'x', ?2)").bind(email, role).run();
 });
 after(() => mf?.dispose());
 
@@ -136,7 +140,7 @@ test('team members have bb/100 hidden', { skip }, async () => {
 });
 
 test('rebuild (admin only) recomputes the same counters from R2, with regs applied', { skip }, async () => {
-  assert.equal((await api('/api/admin/rebuild', { method: 'POST' })).status, 403);
+  assert.equal((await api('/api/admin/rebuild', { method: 'POST', user: 'player@team.com' })).status, 403);
   const before = (await api('/api/stats?nick=dLzinN')).body;
   const db = await mf.getD1Database('DB');
   await db.prepare("INSERT INTO regs (site, nick) SELECT 'PokerKing', nick FROM stats GROUP BY nick").run(); // everyone is a reg
@@ -155,4 +159,80 @@ test('rebuild (admin only) recomputes the same counters from R2, with regs appli
     for (const k of regKeys) assert.deepEqual(a.c[k], a.c[k.slice(0, -4)], `${k} equals vs-all when everyone is a reg`);
   }
   assert.equal((await api('/api/regs')).body.regs > 0, true);
+});
+
+// ---------- accounts, invites and roles ----------
+async function fresh() {
+  const { outputFiles } = await build({ entryPoints: ['worker.ts'], bundle: true, format: 'esm', write: false, platform: 'neutral' });
+  const m = new Miniflare({
+    modules: true, script: outputFiles[0].text, compatibilityDate: '2025-09-01',
+    d1Databases: ['DB'], r2Buckets: ['RAW'], bindings: { ACCESS_AUD: AUD, SESSION_SECRET: 'test-secret' },
+  });
+  const db = await m.getD1Database('DB');
+  for (const stmt of readFileSync('schema.sql', 'utf8').replace(/--.*$/gm, '').split(';').map(s => s.trim()).filter(Boolean)) await db.prepare(stmt).run();
+  const call = async (path: string, init: RequestInit & { cookie?: string } = {}) => {
+    const headers = new Headers(init.headers);
+    if (init.cookie) headers.set('cookie', init.cookie);
+    const res = await m.dispatchFetch(`http://localhost${path}`, { ...init, headers } as never);
+    return { status: res.status, body: await res.json() as any, cookie: res.headers.get('set-cookie')?.split(';')[0] ?? '' };
+  };
+  return { m, call };
+}
+
+test('first account becomes admin, the next ones need a valid invite', async () => {
+  const { m, call } = await fresh();
+  const first = await call('/api/register', { method: 'POST', body: JSON.stringify({ email: 'boss@team.com', pass: 'segredo123' }) });
+  assert.equal(first.status, 200);
+  assert.deepEqual(first.body, { email: 'boss@team.com', role: 'admin' });
+
+  const noInvite = await call('/api/register', { method: 'POST', body: JSON.stringify({ email: 'x@team.com', pass: 'segredo123' }) });
+  assert.equal(noInvite.status, 403, 'second account without an invite is refused');
+
+  const short = await call('/api/register', { method: 'POST', body: JSON.stringify({ email: 'x@team.com', pass: 'curta' }) });
+  assert.equal(short.status, 400, 'password shorter than 8 characters');
+
+  const invite = await call('/api/invites', { method: 'POST', body: JSON.stringify({ role: 'player' }), cookie: first.cookie });
+  assert.equal(invite.status, 200);
+  const joined = await call('/api/register', { method: 'POST', body: JSON.stringify({ email: 'novo@team.com', pass: 'segredo123', code: invite.body.code }) });
+  assert.deepEqual(joined.body, { email: 'novo@team.com', role: 'player' });
+
+  const reuse = await call('/api/register', { method: 'POST', body: JSON.stringify({ email: 'outro@team.com', pass: 'segredo123', code: invite.body.code }) });
+  assert.equal(reuse.status, 403, 'an invite works only once');
+  await m.dispose();
+});
+
+test('login checks the password and the session cookie identifies the user', async () => {
+  const { m, call } = await fresh();
+  const reg = await call('/api/register', { method: 'POST', body: JSON.stringify({ email: 'boss@team.com', pass: 'segredo123' }) });
+  assert.equal((await call('/api/login', { method: 'POST', body: JSON.stringify({ email: 'boss@team.com', pass: 'errada' }) })).status, 401);
+  const ok = await call('/api/login', { method: 'POST', body: JSON.stringify({ email: 'boss@team.com', pass: 'segredo123' }) });
+  assert.equal(ok.status, 200);
+  assert.deepEqual((await call('/api/me', { cookie: ok.cookie })).body, { email: 'boss@team.com', role: 'admin' });
+  assert.equal((await call('/api/me')).status, 401, 'no cookie, no session');
+  assert.equal((await call('/api/me', { cookie: 'ml=forjado.abc' })).status, 401, 'tampered cookie');
+  assert.ok(reg.cookie.startsWith('ml='));
+  await m.dispose();
+});
+
+test('player role can read but cannot upload, invite or rebuild', async () => {
+  const { m, call } = await fresh();
+  const boss = await call('/api/register', { method: 'POST', body: JSON.stringify({ email: 'boss@team.com', pass: 'segredo123' }) });
+  const invite = await call('/api/invites', { method: 'POST', body: JSON.stringify({ role: 'player' }), cookie: boss.cookie });
+  const p = await call('/api/register', { method: 'POST', body: JSON.stringify({ email: 'peao@team.com', pass: 'segredo123', code: invite.body.code }) });
+
+  assert.equal((await call('/api/players', { cookie: p.cookie })).status, 200, 'player reads the base');
+  assert.equal((await call('/api/upload?sha=' + sha('x') + '&part=0', { method: 'POST', body: gzipSync('x'), cookie: p.cookie })).status, 403);
+  assert.equal((await call('/api/invites', { method: 'POST', body: '{}', cookie: p.cookie })).status, 403);
+  assert.equal((await call('/api/users', { cookie: p.cookie })).status, 403);
+  assert.equal((await call('/api/admin/rebuild', { method: 'POST', cookie: p.cookie })).status, 403);
+  await m.dispose();
+});
+
+test('the players column lists the base with hand counts', { skip }, async () => {
+  const rows = (await api('/api/players')).body as { nick: string; hands: number }[];
+  assert.ok(rows.length > 0);
+  assert.equal(rows[0].nick, 'dLzinN', 'sorted by hands');
+  assert.ok(rows.every((r, i) => i === 0 || r.hands <= rows[i - 1].hands));
+  const filtered = (await api('/api/players?q=dlz')).body as { nick: string }[];
+  assert.deepEqual(filtered.map(r => r.nick), ['dLzinN']);
 });
