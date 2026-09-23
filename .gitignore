@@ -1,5 +1,6 @@
 # hand histories and anything with other players' data (never in a public repo)
 hands_*.txt
+hands/
 test/fixtures/sample.txt
 gabarito_dLzinN/regs_all_regs_filtro.txt
 

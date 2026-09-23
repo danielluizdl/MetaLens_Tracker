@@ -6,8 +6,8 @@
     "test": "npm run build:ui && node --test src/*.test.ts worker.test.ts",
     "build:ui": "node -e \"require('esbuild').build({entryPoints:['src/ui.ts'],bundle:true,format:'esm',minify:true,outfile:'public/app.js'}).catch(()=>process.exit(1))\"",
     "fixture": "node scripts/make-fixture.mjs",
-    "db:init": "npx wrangler d1 execute metalens --local --file schema.sql",
-    "dev": "npm run build:ui && npx wrangler dev --local",
+    "db:init": "npx wrangler d1 execute metalens --local --persist-to D:/MetaLens_data/state --file schema.sql",
+    "dev": "npm run build:ui && npx wrangler dev --local --persist-to D:/MetaLens_data/state",
     "import": "node scripts/import-local.mjs"
   },
   "devDependencies": {
